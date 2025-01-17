@@ -6,3 +6,7 @@ load_dotenv()  # Loads variables from .env into environment
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
     raise ValueError("OPENAI_API_KEY is not set in environment variables.")
+
+
+import openai
+openai.api_key = openai_api_key
