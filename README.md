@@ -13,6 +13,7 @@ cd my-ai-chat-project
 
 ```bash
 python3 -m venv .venv
+
 source .venv/bin/activate       # On macOS/Linux
 # or
 .venv\Scripts\activate.bat      # On Windows
