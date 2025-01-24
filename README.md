@@ -5,7 +5,7 @@ A minimal Streamlit-based chat system that accepts text and images (OCR) and use
 ## 1. Clone the Repository
 
 ```bash
-git clone https://github.com/<YourUsername>/my-ai-chat-project.git
+git clone https://github.com/Priyansh-14/my-ai-chat-project.git
 cd my-ai-chat-project
 ```
 
