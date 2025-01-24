@@ -1,16 +1,18 @@
 import os
 import traceback
 from dotenv import load_dotenv # type: ignore
+import fitz
 import streamlit as st # type: ignore
 import openai # type: ignore
 import pytesseract # type: ignore
 from PIL import Image # type: ignore
-import io
+
 
 # Load environment variables (e.g., OPENAI_API_KEY) from .env
-load_dotenv()
+load_dotenv(override=True)
 
 openai_api_key = os.getenv("OPENAI_API_KEY")
+# print(openai_api_key)
 if not openai_api_key:
     raise ValueError("OPENAI_API_KEY is not set in environment variables.")
 
@@ -24,11 +26,6 @@ if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
 def get_ai_reply(prompt: str) -> str:
-    """
-    Calls the OpenAI API to get a reply using the latest method in openai>=1.0.0:
-    openai.Chat.completions.create(...)
-    """
-
     # Build the conversation array from st.session_state["messages"]
     conversation = [
         {"role": msg[0], "content": msg[1]} 
@@ -37,14 +34,16 @@ def get_ai_reply(prompt: str) -> str:
     conversation.append({"role": "user", "content": prompt})
 
     try:
-        # Using the new method name for Chat completions in openai>=1.0.0
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=conversation,
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            store=True,
+            messages= conversation,
             # temperature=0.7,
         )
+
         # Extract the assistant's reply
-        reply = response["choices"][0]["message"]["content"]
+        reply = completion.choices[0].message.content
+        # print(reply)
         return reply
     except Exception as e:
         # 4) Log the full stack trace to the terminal for debugging
@@ -66,37 +65,45 @@ def main():
     # Text input
     user_input = st.text_input("Enter your message:", "")
 
-    # Image upload (optional)
-    uploaded_image = st.file_uploader("Upload an image (optional)", type=["png", "jpg", "jpeg"])
+    # Image/pdf upload (optional)
+    uploaded_file = st.file_uploader("Upload an image/pdf file (optional)", type=["png", "jpg", "jpeg", "tiff", "bmp", "pdf", "webp",])
 
     if st.button("Send"):
         combined_prompt = user_input.strip()
 
-        # If an image is uploaded, perform OCR
-        if uploaded_image is not None:
-            image = Image.open(uploaded_image)
-            extracted_text = pytesseract.image_to_string(image)
-            extracted_text = extracted_text.strip()
-            if extracted_text:
-                combined_prompt += f"\n\n[OCR TEXT FROM IMAGE]:\n{extracted_text}"
+        if uploaded_file is not None:
+            if uploaded_file.type == "application/pdf":
+                # Extract text from PDF
+                pdf_text = ""
+                with fitz.open(stream=uploaded_file.read(), filetype="pdf") as doc:
+                    for page in doc:
+                        pdf_text += page.get_text()
+
+                pdf_text = pdf_text.strip()
+                if pdf_text:
+                    combined_prompt += f"\n\n[EXTRACTED TEXT FROM PDF]:\n{pdf_text}"
+                else:
+                    st.warning("No text found in PDF. Try the OCR approach if it's scanned.")
+            else:
+                # Handle as an image
+                image = Image.open(uploaded_file)
+                extracted_text = pytesseract.image_to_string(image).strip()
+                if extracted_text:
+                    combined_prompt += f"\n\n[OCR TEXT FROM IMAGE]:\n{extracted_text}"
 
         if not combined_prompt:
-            st.warning("Please type something or upload an image to extract text from.")
+            st.warning("Please type something or upload a file to extract text from.")
         else:
-            # Add user message
-            st.session_state["messages"].append(("user", combined_prompt))
+                # Add user message
+                st.session_state["messages"].append(("user", combined_prompt))
 
-            # Get AI reply
-            ai_reply = get_ai_reply(combined_prompt)
+                # Get AI reply
+                ai_reply = get_ai_reply(combined_prompt)
 
-            # Add AI reply
-            st.session_state["messages"].append(("assistant", ai_reply))
+                # Add AI reply
+                st.session_state["messages"].append(("assistant", ai_reply))
 
-            # If you wish to force a re-run to update the UI automatically,
-            # use st.experimental_rerun() in older versions of Streamlit.
-            # For newer versions where experimental_rerun() is removed or renamed,
-            # you can simply rely on Streamlit's normal rerun after a widget event.
-
+                st.rerun()
 
 if __name__ == "__main__":
     main()
