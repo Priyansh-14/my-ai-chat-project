@@ -98,10 +98,8 @@ OPENAI_API_KEY="sk-XXXXXXXXXXXXXXXXXXXX"
       ```bash
       sudo apt-get install tesseract-ocr
       ```
-   - Windows:
-      ```bash
-      Download the installer
-      ```
+   - Windows: Download the installer
+
 
 7. Run the App
 
