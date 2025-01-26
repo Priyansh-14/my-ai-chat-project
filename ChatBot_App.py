@@ -1,11 +1,16 @@
+import io
 import os
-import base64
 import traceback
+import base64
 
 import streamlit as st
 from dotenv import load_dotenv
 import fitz  # PyMuPDF
+import pytesseract  # For OCR
+from PIL import Image
 
+
+from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_openai import ChatOpenAI
 from langchain.schema import (
     AIMessage,
@@ -51,30 +56,83 @@ llm = ChatOpenAI(
     model_name="gpt-4o-mini",
     temperature=0.5,
 )
-
+embeddings = OpenAIEmbeddings(api_key=openai_api_key)
 
 # 4. PDF & Image helper functions
 def extract_text_from_pdf(file) -> str:
     """Extract text from a (non-scanned) PDF using PyMuPDF."""
     extracted_text = ""
     try:
+        file.seek(0)
         with fitz.open(stream=file.read(), filetype="pdf") as doc:
             for page in doc:
-                extracted_text += page.get_text()
+                page_text = page.get_text()
+                # If text is empty, fallback to OCR
+                if not page_text.strip():
+                    pix = page.get_pixmap()  # Render page as an image
+                    img = Image.open(io.BytesIO(pix.tobytes("png")))
+                    page_text = pytesseract.image_to_string(img)
+                extracted_text += page_text + "\n\n"
     except Exception as e:
         traceback.print_exc()
     return extracted_text.strip()
 
-def encode_image_as_base64(image_file) -> str:
-    """Base64-encode an image for passing as placeholder text."""
+
+# def preprocess_image(image_file):
+#     """Resize and preprocess the image to reduce size."""
+#     try:
+#         image = Image.open(image_file)
+#         image = image.convert("RGB")  # Ensure RGB format
+#         image = image.resize((128, 128))  # Resize to reduce size
+#         byte_stream = io.BytesIO()
+#         image.save(byte_stream, format="JPEG", quality=50)  # Compress image
+#         byte_stream.seek(0)
+#         return byte_stream.getvalue()
+#     except Exception as e:
+#         traceback.print_exc()
+#         return None
+
+
+# def generate_image_embedding(image_data):
+#     """Generate an embedding for preprocessed image data."""
+#     try:
+#         if not image_data:
+#             return None
+#         # Assuming embeddings.embed_documents is used correctly
+
+#         encoded_image = base64.b64encode(image_data).decode('utf-8')
+        
+#         # Use the encoded string as a placeholder for embeddings
+#         return embeddings.embed_documents([encoded_image])[0]
+    
+#         # text_representation = image_data.decode("latin-1")
+#         # return embeddings.embed_documents([text_representation])[0]
+#     except Exception as e:
+#         traceback.print_exc()
+#         return "[Error in generating image embedding]"
+    
+# def encode_image_as_base64(image_file) -> str:
+#     """Base64-encode an image for passing as placeholder text."""
+#     try:
+#         contents = image_file.read()
+#         encoded = base64.b64encode(contents).decode("utf-8")
+#         return f"[IMAGE FILE (base64, first 300 chars)]: {encoded[:300]}..."
+#     except Exception as e:
+#         traceback.print_exc()
+#         return "[IMAGE FILE ENCODE ERROR]"
+
+
+def extract_text_from_image(image_file) -> str:
+    """
+    Extract text from an image using Tesseract OCR.
+    """
     try:
-        contents = image_file.read()
-        encoded = base64.b64encode(contents).decode("utf-8")
-        return f"[IMAGE FILE (base64, first 300 chars)]: {encoded[:300]}..."
+        image = Image.open(image_file)  # Open image using PIL
+        extracted_text = pytesseract.image_to_string(image)  # Perform OCR
+        return extracted_text.strip()
     except Exception as e:
         traceback.print_exc()
-        return "[IMAGE FILE ENCODE ERROR]"
-
+        return "[Error in OCR text extraction]"
 
 # 5. Our core chat function
 def run_chat(user_input: str) -> str:
@@ -125,6 +183,8 @@ def main():
         st.session_state["past"] = []       # user inputs
     if "generated" not in st.session_state:
         st.session_state["generated"] = []  # AI responses
+    if "is_loading" not in st.session_state:
+        st.session_state["is_loading"] = False  # Loading state
 
     st.write("This bot **only** answers questions about **Streamlit**. "
              "If you ask out of scope, it will refuse.")
@@ -139,11 +199,22 @@ def main():
 
     # Optional file upload
     uploaded_file = st.file_uploader(
-        "Upload an Image/PDF (optional), and its content/placeholder will be appended to your prompt:",
+        "Upload an Image/PDF , and its embedding/content will be appended to your prompt:",
         type=["png", "jpg", "jpeg", "tiff", "bmp", "pdf", "webp"],
     )
 
+    # Placeholder for loading spinner
+    loading_placeholder = st.empty()
+
+    #  # Disable send button and show loader
+    # send_button_disabled = st.session_state.get("is_loading", False)
+
     if st.button("Send"):
+        st.session_state["is_loading"] = True  # Set loading state to True
+        with loading_placeholder.container():
+            st.write("Processing your request, please wait...")
+            st.spinner("Loading...")  # Display loading spinner
+
         # Combine user question + file data
         combined_input = user_input.strip()
         if uploaded_file:
@@ -152,18 +223,56 @@ def main():
                 if pdf_text:
                     combined_input += f"\n\n[PDF TEXT EXTRACTED]:\n{pdf_text}"
             else:
-                encoded = encode_image_as_base64(uploaded_file)
-                combined_input += f"\n\n{encoded}"
+                ocr_text = extract_text_from_image(uploaded_file)  # Extract text using OCR
+                if ocr_text:
+                    combined_input += f"\n\n[TEXT EXTRACTED FROM IMAGE]:\n{ocr_text}"
+                # encoded = encode_image_as_base64(uploaded_file)
+                # combined_input += f"\n\n[ENCODED IMAGE AS BASE64]: {encoded}"
+                # image_data = preprocess_image(uploaded_file)
+                # if image_data:
+                #     embedding = generate_image_embedding(image_data)
+                #     if embedding:
+                #         combined_input += f"\n\n[IMAGE EMBEDDING]: {embedding[:300]}..."
 
         # Get AI response
         try:
             response = run_chat(combined_input)
+            st.success("Response generated successfully!")
+            # st.write(response)
         except Exception as e:
             traceback.print_exc()
             response = f"Error: {e}"
             # store error so conversation remains consistent
             st.session_state["past"].append(user_input)
             st.session_state["generated"].append(response)
+            # st.error(f"An error occurred: {e}")
+
+        finally:
+            st.session_state["is_loading"] = False 
+            loading_placeholder.empty() 
+
+    #      # Show spinner while loading
+    # if st.session_state["is_loading"]:
+    #     st.markdown("<div style='text-align: center;'><div class='loader'></div></div>", unsafe_allow_html=True)
+    #     st.markdown(
+    #         """
+    #         <style>
+    #         .loader {
+    #             border: 16px solid #f3f3f3; /* Light grey */
+    #             border-top: 16px solid #3498db; /* Blue */
+    #             border-radius: 50%;
+    #             width: 120px;
+    #             height: 120px;
+    #             animation: spin 2s linear infinite;
+    #         }
+    #         @keyframes spin {
+    #             0% { transform: rotate(0deg); }
+    #             100% { transform: rotate(360deg); }
+    #         }
+    #         </style>
+    #         """,
+    #         unsafe_allow_html=True,
+    #     )
 
         st.rerun()
 
