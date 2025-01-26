@@ -90,9 +90,18 @@ OPENAI_API_KEY="sk-XXXXXXXXXXXXXXXXXXXX"
 
 5. Tesseract Installation
    - If you plan to upload images and need OCR, install Tesseract on your machine:
-      - macOS: brew install tesseract
-      - Ubuntu/Debian: sudo apt-get install tesseract-ocr
-      - Windows: Download the installer
+   - macOS:
+        ```bash
+       brew install tesseract
+       ```
+   - Ubuntu/Debian:
+      ```bash
+      sudo apt-get install tesseract-ocr
+      ```
+   - Windows:
+      ```bash
+      Download the installer
+      ```
 
 7. Run the App
 
