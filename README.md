@@ -89,12 +89,12 @@ OPENAI_API_KEY="sk-XXXXXXXXXXXXXXXXXXXX"
 #### Note: Ensure .env is included in your .gitignore so the API key is not committed.
 
 5. Tesseract Installation
-   • If you plan to upload images and need OCR, install Tesseract on your machine:
-   • macOS: brew install tesseract
-   • Ubuntu/Debian: sudo apt-get install tesseract-ocr
-   • Windows: Download the installer
+   - If you plan to upload images and need OCR, install Tesseract on your machine:
+      - macOS: brew install tesseract
+      - Ubuntu/Debian: sudo apt-get install tesseract-ocr
+      - Windows: Download the installer
 
-6. Run the App
+7. Run the App
 
 ```bash
 streamlit run app.py
